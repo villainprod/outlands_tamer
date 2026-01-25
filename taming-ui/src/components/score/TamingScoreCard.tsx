@@ -1,47 +1,65 @@
 // src/components/score/TamingScoreCard.tsx
 import React from "react";
-import type { Pet, StatKey } from "../../App";
 import { CircularProgress } from "../common/CircularProgress";
+import type { StatKey } from "../../App";
 
-type Props = {
-  pet?: Pet;
-  statsOrder: StatKey[];
+type TeamStats = {
+  score: number;
+  survivability: number;
+  damage: number;
+  control: number;
+  utility: number;
 };
 
-export const TamingScoreCard: React.FC<Props> = ({ pet, statsOrder }) => {
-  const value = pet?.tamingScore ?? 0;
-  const stats = pet?.stats;
+type Props = {
+  teamStats: TeamStats;
+};
+
+const ORDER: StatKey[] = [
+  "survivability",
+  "damage",
+  "control",
+  "utility"
+];
+
+export const TamingScoreCard: React.FC<Props> = ({ teamStats }) => {
+  const normalized = Math.max(
+    0,
+    Math.min(100, (teamStats.score / 400) * 100)
+  );
 
   return (
     <article className="card">
       <div className="card-title">Taming score</div>
       <div className="taming-score-wrapper">
-        <CircularProgress value={value} />
+        <CircularProgress value={normalized} />
         <div className="taming-score-labels">
-          <div className="taming-score-main">{value}%</div>
+          <div className="taming-score-main">
+            {teamStats.score}
+          </div>
           <div className="taming-score-sub">
-            Overall taming efficiency for this pet.
+            Overall synergy for this team and play style.
           </div>
         </div>
       </div>
 
-      {stats && (
-        <div className="taming-score-metrics">
-          {statsOrder.map((key) => (
-            <div key={key} className="metric-row">
-              <span className="metric-label">
-                {key.charAt(0).toUpperCase() + key.slice(1)}
-              </span>
-              <div className="metric-bar" aria-hidden>
-                <div
-                  className="metric-bar-fill"
-                  style={{ width: `${stats[key]}%` }}
-                />
-              </div>
+      <div className="taming-score-metrics">
+        {ORDER.map((key) => (
+          <div key={key} className="metric-row">
+            <span className="metric-label">
+              {key.charAt(0).toUpperCase() + key.slice(1)}
+            </span>
+            <div className="metric-bar">
+              <div
+                className="metric-bar-fill"
+                style={{
+                  width: `${teamStats[key]}%`
+                }}
+              />
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </article>
   );
 };

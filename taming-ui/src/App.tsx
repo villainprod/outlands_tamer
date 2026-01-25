@@ -1,8 +1,10 @@
 // src/App.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./styles/global.css";
 import { AppShell } from "./components/layout/AppShell";
 import { AddPetModal } from "./components/pets/AddPetModal";
+import type { TameablePet } from "./types/tameables";
+import { scoreTeam, type PlaystyleKey } from "./logic/teamScoring";
 
 export type StatKey = "survivability" | "damage" | "control" | "utility";
 
@@ -10,150 +12,167 @@ export type Ability = {
   id: string;
   name: string;
   description?: string;
-  points: number; // 0-5
+  points: number;
   maxPoints?: number;
 };
 
 export type ClassKey = "attack" | "tank" | "utility";
 
-export type Pet = {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-  status: "healthy" | "injured" | "danger";
-  tamingScore: number; // 0-100
-  stats: Record<StatKey, number>; // 0-100
-  playStyle: "ranged" | "melee" | "aoe";
-  abilities: Record<ClassKey, Ability[]>;
-};
+// Lightweight CSV parser for tameables.csv header + rows
+function parseTameablesCsv(csvText: string): TameablePet[] {
+  const lines = csvText.trim().split(/\r?\n/);
+  if (lines.length <= 1) return [];
 
-const MOCK_PETS: Pet[] = [
-  {
-    id: "pet-1",
-    name: "Frost Wolf",
-    status: "healthy",
-    tamingScore: 82,
-    playStyle: "ranged",
-    avatarUrl: "",
-    stats: {
-      survivability: 70,
-      damage: 85,
-      control: 60,
-      utility: 55
-    },
-    abilities: {
-      attack: [
-        {
-          id: "fireball",
-          name: "Fireball",
-          description: "Long-range burst hit",
-          points: 5
-        },
-        {
-          id: "arcane-bolt",
-          name: "Arcane Bolt",
-          description: "Reliable single target poke",
-          points: 3
-        },
-        {
-          id: "poison-spit",
-          name: "Poison Spit",
-          description: "Stacks damage over time",
-          points: 2
-        }
-      ],
-      tank: [
-        {
-          id: "guard-stance",
-          name: "Guard Stance",
-          description: "Flat damage reduction",
-          points: 4
-        },
-        {
-          id: "shield-block",
-          name: "Shield Block",
-          description: "Chance to negate hits",
-          points: 3
-        },
-        {
-          id: "taunt",
-          name: "Taunt",
-          description: "Pulls threat to pet",
-          points: 1
-        }
-      ],
-      utility: [
-        {
-          id: "cleanse",
-          name: "Cleanse",
-          description: "Removes 1–2 debuffs",
-          points: 3
-        },
-        {
-          id: "mana-boost",
-          name: "Mana Boost",
-          description: "Restores caster mana",
-          points: 2
-        },
-        {
-          id: "swift-paws",
-          name: "Swift Paws",
-          description: "Short dash to ally",
-          points: 1
-        }
-      ]
-    }
-  },
-  {
-    id: "pet-2",
-    name: "Forest Wolf",
-    status: "healthy",
-    tamingScore: 75,
-    playStyle: "melee",
-    avatarUrl: "",
-    stats: {
-      survivability: 78,
-      damage: 72,
-      control: 65,
-      utility: 40
-    },
-    abilities: {
-      attack: [],
-      tank: [],
-      utility: []
-    }
-  },
-  {
-    id: "pet-3",
-    name: "Stone Serpent",
-    status: "injured",
-    tamingScore: 63,
-    playStyle: "aoe",
-    avatarUrl: "",
-    stats: {
-      survivability: 88,
-      damage: 64,
-      control: 40,
-      utility: 50
-    },
-    abilities: {
-      attack: [],
-      tank: [],
-      utility: []
-    }
+  const header = lines[0].split(",");
+  const rows = lines.slice(1);
+
+  const idx = (name: string) => header.indexOf(name);
+
+  return rows
+    .filter((line) => line.trim().length > 0)
+    .map((line, i) => {
+      const cols = line.split(",");
+      const slots = Number(cols[idx("Slots")] || 0);
+      const minDmg = Number(cols[idx("MinDmg")] || 0);
+      const maxDmg = Number(cols[idx("MaxDmg")] || 0);
+      const underdogScalar = Number(
+        cols[idx("UnderdogScalar")] || 1
+      );
+
+      const cooldownAbility = cols[idx("CooldownAbility")] || "";
+      const passiveAbility = cols[idx("PassiveAbility")] || "";
+      const innateAbility = cols[idx("InnateAbility")] || "";
+
+      const combat = cols[idx("Combat")] || "";
+      const className = cols[idx("Class")] || "";
+
+      const tags = deriveTagsFromTameable(
+        className,
+        combat,
+        cooldownAbility,
+        passiveAbility,
+        innateAbility
+      );
+
+      const pet: TameablePet = {
+        id: `tameable-${i}`,
+        name: cols[idx("name")] || "Unnamed",
+        dungeon: cols[idx("Dungeon")] || "",
+        slots,
+        taming: Number(cols[idx("Taming")] || 0),
+        class: className as TameablePet["class"],
+        combat,
+        hits: Number(cols[idx("Hits")] || 0),
+        minDmg,
+        maxDmg,
+        wrestling: Number(cols[idx("Wrestling")] || 0),
+        armor: Number(cols[idx("Armor")] || 0),
+        magicRst: cols[idx("MagicRst")] || "",
+        poisonRst: cols[idx("PoisonRst")] || "",
+        specialRst: cols[idx("SpecialRst")] || "",
+        poison: cols[idx("Poison")] || "",
+        poisoning: cols[idx("Poisoning")]
+          ? Number(cols[idx("Poisoning")])
+          : null,
+        stealth: cols[idx("Stealth")] || "",
+        underdogScalar,
+        cooldownAbility,
+        passiveAbility,
+        innateAbility,
+        tags
+      };
+
+      return pet;
+    });
+}
+
+// Simple tag derivation for scoring; can be expanded over time.
+function deriveTagsFromTameable(
+  className: string,
+  combat: string,
+  cooldownAbility: string,
+  passiveAbility: string,
+  innateAbility: string
+): string[] {
+  const tags = new Set<string>();
+  const cls = className.toLowerCase();
+  const cmb = combat.toLowerCase();
+  const allAbil =
+    `${cooldownAbility} ${passiveAbility} ${innateAbility}`.toLowerCase();
+
+  if (cls === "attack") tags.add("attack");
+  if (cls === "tank") tags.add("tank");
+  if (cls === "utility") tags.add("utility");
+
+  if (cmb === "spell") tags.add("spell");
+  if (cmb === "melee") tags.add("melee");
+
+  if (allAbil.includes("barrage") || allAbil.includes("breath")) {
+    tags.add("aoe");
   }
-];
+  if (allAbil.includes("bleed")) {
+    tags.add("bleed");
+    tags.add("single_target");
+  }
+  if (allAbil.includes("poison") || allAbil.includes("disease")) {
+    tags.add("poison");
+  }
+
+  // ranged-friendly if description suggests ranged or breath/barrage
+  if (allAbil.includes("ranged")) tags.add("ranged_friendly");
+
+  return Array.from(tags);
+}
+
+// Map tameable to UI "Pet" stats used by the right-hand quick stats.
+// For now just create some approximate scores from raw numbers.
+function computeUiStatsForPet(p: TameablePet): Record<StatKey, number> {
+  const survivability = Math.max(
+    0,
+    Math.min(100, (p.hits / 300) * 100)
+  );
+  const damage = Math.max(
+    0,
+    Math.min(
+      100,
+      (((p.minDmg + p.maxDmg) / 2) / 25) * 100
+    )
+  );
+  const control = 50; // placeholder until you define control inputs
+  const utility = p.class === "Utility" ? 80 : 40;
+
+  return {
+    survivability: Math.round(survivability),
+    damage: Math.round(damage),
+    control: Math.round(control),
+    utility: Math.round(utility)
+  };
+}
 
 export const App: React.FC = () => {
-  // treat MOCK_PETS as your full catalog for now
-  const [allPets] = useState<Pet[]>(MOCK_PETS);
-  const [pets, setPets] = useState<Pet[]>(() => MOCK_PETS.slice(0, 3));
-  const [selectedPetId, setSelectedPetId] = useState<string>(pets[0]?.id ?? "");
+  const [allPets, setAllPets] = useState<TameablePet[]>([]);
+  const [pets, setPets] = useState<TameablePet[]>([]);
+  const [selectedPetId, setSelectedPetId] = useState<string>("");
   const [pendingSave, setPendingSave] = useState(false);
+  const [playstyle, setPlaystyle] = useState<PlaystyleKey>("balanced");
 
-  // modal + search state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [petSearch, setPetSearch] = useState("");
+
+  // Load tameables.csv once
+  useEffect(() => {
+    const load = async () => {
+      const res = await fetch("/tameables.csv");
+      const text = await res.text();
+      const parsed = parseTameablesCsv(text);
+      setAllPets(parsed);
+
+      const initial = parsed.slice(0, 3); // seed team
+      setPets(initial);
+      setSelectedPetId(initial[0]?.id ?? "");
+    };
+    load();
+  }, []);
 
   const selectedPet = useMemo(
     () => pets.find((p) => p.id === selectedPetId) ?? pets[0],
@@ -182,13 +201,11 @@ export const App: React.FC = () => {
     setPendingSave(true);
   };
 
-  // open modal instead of auto-adding
   const handleAddPet = () => {
     if (pets.length >= 5) return;
     setIsAddModalOpen(true);
   };
 
-  // called when user picks a pet in the modal
   const handleConfirmAddPet = (id: string) => {
     setPets((prev) => {
       if (prev.length >= 5) return prev;
@@ -197,39 +214,81 @@ export const App: React.FC = () => {
       const candidate = allPets.find((p) => p.id === id);
       if (!candidate) return prev;
 
-      const next = [...prev, candidate];
-      return next;
+      return [...prev, candidate];
     });
     setPendingSave(true);
     setIsAddModalOpen(false);
     setPetSearch("");
   };
 
-  const handleChangePlayStyle = (style: Pet["playStyle"]) => {
-    if (!selectedPet) return;
-    selectedPet.playStyle = style;
+  const handleChangePlayStyle = (styleLabel: "ranged" | "melee" | "aoe") => {
+    let key: PlaystyleKey = "balanced";
+    if (styleLabel === "ranged") key = "aoe_far";
+    else if (styleLabel === "melee") key = "single_target";
+    else key = "balanced";
+
+    setPlaystyle(key);
     setPendingSave(true);
   };
 
-  const handleToggleAbilityPoint = (klass: ClassKey, abilityId: string) => {
-    if (!selectedPet) return;
-    const list = selectedPet.abilities[klass];
-    const ability = list.find((a) => a.id === abilityId);
-    if (!ability) return;
-    const max = ability.maxPoints ?? 5;
-    ability.points = ability.points >= max ? 0 : ability.points + 1;
+  const handleToggleAbilityPoint = (_klass: ClassKey, _abilityId: string) => {
+    // ability points will come from bestiary integration later
     setPendingSave(true);
   };
 
-  const totalPoints = useMemo(() => {
-    if (!selectedPet) return { total: 0, attack: 0, tank: 0, utility: 0 };
-    const sumClass = (klass: ClassKey) =>
-      selectedPet.abilities[klass].reduce((acc, a) => acc + a.points, 0);
-    const attack = sumClass("attack");
-    const tank = sumClass("tank");
-    const utility = sumClass("utility");
-    return { total: attack + tank + utility, attack, tank, utility };
-  }, [selectedPet]);
+  const teamScore = useMemo(
+    () => scoreTeam(pets, playstyle),
+    [pets, playstyle]
+  );
+
+  const teamStats = useMemo(() => {
+    if (pets.length === 0) {
+      return {
+        score: 0,
+        survivability: 0,
+        damage: 0,
+        control: 0,
+        utility: 0
+      };
+    }
+
+    const totals = pets.reduce(
+      (acc, p) => {
+        const stats = computeUiStatsForPet(p);
+        acc.survivability += stats.survivability;
+        acc.damage += stats.damage;
+        acc.control += stats.control;
+        acc.utility += stats.utility;
+        return acc;
+      },
+      {
+        survivability: 0,
+        damage: 0,
+        control: 0,
+        utility: 0
+      }
+    );
+
+    const n = pets.length;
+    return {
+      score: teamScore,
+      survivability: Math.round(totals.survivability / n),
+      damage: Math.round(totals.damage / n),
+      control: Math.round(totals.control / n),
+      utility: Math.round(totals.utility / n)
+    };
+  }, [pets, teamScore]);
+
+  const quickStats = selectedPet
+    ? computeUiStatsForPet(selectedPet)
+    : {
+        survivability: 0,
+        damage: 0,
+        control: 0,
+        utility: 0
+      };
+
+  const totalPoints = { total: 0, attack: 0, tank: 0, utility: 0 };
 
   const handleSave = () => {
     setPendingSave(false);
@@ -239,7 +298,16 @@ export const App: React.FC = () => {
     <div className="app-root">
       <AppShell
         pets={pets.slice(0, 5)}
-        selectedPet={selectedPet}
+        selectedPet={
+          selectedPet
+            ? {
+                ...selectedPet,
+                stats: quickStats,
+                tamingScore: teamScore
+              }
+            : undefined
+        }
+        teamStats={teamStats}
         onSelectPet={handleSelectPet}
         onChangePlayStyle={handleChangePlayStyle}
         onToggleAbilityPoint={handleToggleAbilityPoint}
