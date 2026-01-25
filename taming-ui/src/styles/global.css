@@ -249,6 +249,7 @@ body {
 }
 
 .chip {
+  color: var(--text-main);
   width: 100%;
   min-height: 44px;
   padding: 10px 14px;
@@ -262,6 +263,11 @@ body {
   cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast),
     box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.app-header .chip {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--border-subtle);
 }
 
 .chip:hover {
