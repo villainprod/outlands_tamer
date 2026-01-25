@@ -1,7 +1,8 @@
 // src/App.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import "./styles/global.css";
 import { AppShell } from "./components/layout/AppShell";
+import { AddPetModal } from "./components/pets/AddPetModal";
 
 export type StatKey = "survivability" | "damage" | "control" | "utility";
 
@@ -26,71 +27,133 @@ export type Pet = {
   abilities: Record<ClassKey, Ability[]>;
 };
 
-// Small CSV parser for header + comma-separated rows
-function parsePetsCsv(csvText: string): Pet[] {
-  const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length <= 1) return [];
-
-  const header = lines[0].split(",");
-  const rows = lines.slice(1);
-
-  const idx = (name: string) => header.indexOf(name);
-
-  return rows
-    .filter((line) => line.trim().length > 0)
-    .map((line) => {
-      const cols = line.split(",");
-      const status = (cols[idx("status")] || "healthy") as Pet["status"];
-      const playStyle = (cols[idx("playStyle")] || "ranged") as Pet["playStyle"];
-
-      const pet: Pet = {
-        id: cols[idx("id")] || `pet-${Math.random().toString(36).slice(2)}`,
-        name: cols[idx("name")] || "Unnamed pet",
-        status,
-        tamingScore: Number(cols[idx("tamingScore")] || 0),
-        playStyle,
-        avatarUrl: "",
-        stats: {
-          survivability: Number(cols[idx("survivability")] || 0),
-          damage: Number(cols[idx("damage")] || 0),
-          control: Number(cols[idx("control")] || 0),
-          utility: Number(cols[idx("utility")] || 0)
+const MOCK_PETS: Pet[] = [
+  {
+    id: "pet-1",
+    name: "Frost Wolf",
+    status: "healthy",
+    tamingScore: 82,
+    playStyle: "ranged",
+    avatarUrl: "",
+    stats: {
+      survivability: 70,
+      damage: 85,
+      control: 60,
+      utility: 55
+    },
+    abilities: {
+      attack: [
+        {
+          id: "fireball",
+          name: "Fireball",
+          description: "Long-range burst hit",
+          points: 5
         },
-        // abilities can be fleshed out later
-        abilities: {
-          attack: [],
-          tank: [],
-          utility: []
+        {
+          id: "arcane-bolt",
+          name: "Arcane Bolt",
+          description: "Reliable single target poke",
+          points: 3
+        },
+        {
+          id: "poison-spit",
+          name: "Poison Spit",
+          description: "Stacks damage over time",
+          points: 2
         }
-      };
-
-      return pet;
-    });
-}
+      ],
+      tank: [
+        {
+          id: "guard-stance",
+          name: "Guard Stance",
+          description: "Flat damage reduction",
+          points: 4
+        },
+        {
+          id: "shield-block",
+          name: "Shield Block",
+          description: "Chance to negate hits",
+          points: 3
+        },
+        {
+          id: "taunt",
+          name: "Taunt",
+          description: "Pulls threat to pet",
+          points: 1
+        }
+      ],
+      utility: [
+        {
+          id: "cleanse",
+          name: "Cleanse",
+          description: "Removes 1–2 debuffs",
+          points: 3
+        },
+        {
+          id: "mana-boost",
+          name: "Mana Boost",
+          description: "Restores caster mana",
+          points: 2
+        },
+        {
+          id: "swift-paws",
+          name: "Swift Paws",
+          description: "Short dash to ally",
+          points: 1
+        }
+      ]
+    }
+  },
+  {
+    id: "pet-2",
+    name: "Forest Wolf",
+    status: "healthy",
+    tamingScore: 75,
+    playStyle: "melee",
+    avatarUrl: "",
+    stats: {
+      survivability: 78,
+      damage: 72,
+      control: 65,
+      utility: 40
+    },
+    abilities: {
+      attack: [],
+      tank: [],
+      utility: []
+    }
+  },
+  {
+    id: "pet-3",
+    name: "Stone Serpent",
+    status: "injured",
+    tamingScore: 63,
+    playStyle: "aoe",
+    avatarUrl: "",
+    stats: {
+      survivability: 88,
+      damage: 64,
+      control: 40,
+      utility: 50
+    },
+    abilities: {
+      attack: [],
+      tank: [],
+      utility: []
+    }
+  }
+];
 
 export const App: React.FC = () => {
-  // full list from CSV
-  const [allPets, setAllPets] = useState<Pet[]>([]);
-  // current team (max 5)
-  const [pets, setPets] = useState<Pet[]>([]);
-  const [selectedPetId, setSelectedPetId] = useState<string>("");
+  // treat MOCK_PETS as your full catalog for now
+  const [allPets] = useState<Pet[]>(MOCK_PETS);
+  const [pets, setPets] = useState<Pet[]>(() => MOCK_PETS.slice(0, 3));
+  const [selectedPetId, setSelectedPetId] = useState<string>(pets[0]?.id ?? "");
   const [pendingSave, setPendingSave] = useState(false);
 
-  // load CSV once
-  useEffect(() => {
-    const load = async () => {
-      const res = await fetch("./public/pets.csv"); 
-      const text = await res.text();
-      const parsed = parsePetsCsv(text);
-      setAllPets(parsed);
-
-      const initial = parsed.slice(0, 5);
-      setPets(initial);
-      setSelectedPetId(initial[0]?.id ?? "");
-    };
-
-    load();
-  }, []);
+  // modal + search state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [petSearch, setPetSearch] = useState("");
 
   const selectedPet = useMemo(
     () => pets.find((p) => p.id === selectedPetId) ?? pets[0],
@@ -119,18 +182,27 @@ export const App: React.FC = () => {
     setPendingSave(true);
   };
 
-  // add a pet from CSV that is not already on the team
+  // open modal instead of auto-adding
   const handleAddPet = () => {
+    if (pets.length >= 5) return;
+    setIsAddModalOpen(true);
+  };
+
+  // called when user picks a pet in the modal
+  const handleConfirmAddPet = (id: string) => {
     setPets((prev) => {
       if (prev.length >= 5) return prev;
-      const existingIds = new Set(prev.map((p) => p.id));
-      const candidate = allPets.find((p) => !existingIds.has(p.id));
+      if (prev.find((p) => p.id === id)) return prev;
+
+      const candidate = allPets.find((p) => p.id === id);
       if (!candidate) return prev;
+
       const next = [...prev, candidate];
-      if (!selectedPetId) setSelectedPetId(candidate.id);
       return next;
     });
     setPendingSave(true);
+    setIsAddModalOpen(false);
+    setPetSearch("");
   };
 
   const handleChangePlayStyle = (style: Pet["playStyle"]) => {
@@ -177,6 +249,19 @@ export const App: React.FC = () => {
         onRemovePet={handleRemovePet}
         onClearTeam={handleClearTeam}
         onAddPet={handleAddPet}
+      />
+
+      <AddPetModal
+        open={isAddModalOpen}
+        search={petSearch}
+        onSearchChange={setPetSearch}
+        allPets={allPets}
+        currentTeamIds={pets.map((p) => p.id)}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setPetSearch("");
+        }}
+        onAddPet={handleConfirmAddPet}
       />
     </div>
   );

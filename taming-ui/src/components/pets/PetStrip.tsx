@@ -36,7 +36,6 @@ export const PetStrip: React.FC<Props> = ({
             "pet-tile" + (pet.id === selectedId ? " pet-tile--selected" : "")
           }
         >
-          {/* main clickable area selects pet */}
           <button
             type="button"
             onClick={() => onSelect(pet.id)}
@@ -77,7 +76,6 @@ export const PetStrip: React.FC<Props> = ({
             </div>
           </button>
 
-          {/* small remove button on the right */}
           <button
             type="button"
             onClick={() => onRemovePet(pet.id)}
