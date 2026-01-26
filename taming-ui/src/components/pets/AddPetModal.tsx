@@ -1,16 +1,19 @@
 // src/components/pets/AddPetModal.tsx
 import React, { useMemo } from "react";
-import type { Pet } from "../../App";
+import type { TameablePet } from "../../types/tameables";
 
 type Props = {
   open: boolean;
   search: string;
   onSearchChange: (value: string) => void;
-  allPets: Pet[];
+  allPets: TameablePet[];
   currentTeamIds: string[];
+  currentSlots: number;
   onClose: () => void;
   onAddPet: (id: string) => void;
 };
+
+const MAX_SLOTS = 5;
 
 export const AddPetModal: React.FC<Props> = ({
   open,
@@ -18,6 +21,7 @@ export const AddPetModal: React.FC<Props> = ({
   onSearchChange,
   allPets,
   currentTeamIds,
+  currentSlots,
   onClose,
   onAddPet
 }) => {
@@ -25,12 +29,14 @@ export const AddPetModal: React.FC<Props> = ({
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    let list = allPets.filter((p) => !currentTeamIds.includes(p.id));
+    let list = allPets; // allow duplicates; do not filter by currentTeamIds
     if (term) {
-      list = list.filter((p) => p.name.toLowerCase().includes(term));
+      list = list.filter((p) =>
+        p.name.toLowerCase().includes(term)
+      );
     }
-    return list.slice(0, 50); // basic cap for now
-  }, [allPets, currentTeamIds, search]);
+    return list.slice(0, 100);
+  }, [allPets, search]);
 
   return (
     <div className="add-pet-backdrop" onClick={onClose}>
@@ -64,34 +70,38 @@ export const AddPetModal: React.FC<Props> = ({
 
         <div className="add-pet-list">
           {filtered.length === 0 && (
-            <div className="add-pet-empty">No pets match your search.</div>
+            <div className="add-pet-empty">
+              No pets match your search.
+            </div>
           )}
 
-          {filtered.map((pet) => (
-            <div key={pet.id} className="add-pet-row">
-              <div className="add-pet-main">
-                <div className="add-pet-avatar" />
-                <div className="add-pet-meta">
-                  <div className="add-pet-name">{pet.name}</div>
-                  <div className="add-pet-sub">
-                    Taming score {pet.tamingScore} ·{" "}
-                    {pet.playStyle === "ranged"
-                      ? "Ranged"
-                      : pet.playStyle === "melee"
-                      ? "Melee"
-                      : "AOE"}
+          {filtered.map((pet) => {
+            const cost = pet.slots || 0;
+            const disabled = currentSlots + cost > MAX_SLOTS;
+
+            return (
+              <div key={`${pet.id}-${cost}-${pet.name}`} className="add-pet-row">
+                <div className="add-pet-main">
+                  <div className="add-pet-avatar" />
+                  <div className="add-pet-meta">
+                    <div className="add-pet-name">{pet.name}</div>
+                    <div className="add-pet-sub">
+                      Taming {pet.taming} · Slots {pet.slots} ·{" "}
+                      {pet.class}
+                    </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="add-pet-add-button"
+                  onClick={() => !disabled && onAddPet(pet.id)}
+                  disabled={disabled}
+                >
+                  {disabled ? "Full" : "Add"}
+                </button>
               </div>
-              <button
-                type="button"
-                className="add-pet-add-button"
-                onClick={() => onAddPet(pet.id)}
-              >
-                Add
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

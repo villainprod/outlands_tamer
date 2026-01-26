@@ -1,95 +1,169 @@
 // src/components/classes/ClassTilesRow.tsx
 import React from "react";
-import type { Pet, ClassKey } from "../../App";
+import type { TameablePet } from "../../types/tameables";
+import type { PlaystyleKey } from "../../logic/teamScoring";
+import {
+  type BestiarySets,
+  type ScoredTrait,
+  buildTwentyPointAllocation,
+  recommendBestiaryAttack,
+  recommendBestiaryTank,
+  recommendBestiaryUtility
+} from "../../logic/bestiary";
 
 type Props = {
-  pet?: Pet;
-  onToggleAbilityPoint: (klass: ClassKey, abilityId: string) => void;
-  totals: { total: number; attack: number; tank: number; utility: number };
+  selectedPets: TameablePet[];
+  playstyle: PlaystyleKey;
+  bestiary: BestiarySets | null;
 };
 
-const AbilityPips: React.FC<{ count: number; max?: number }> = ({
-  count,
-  max = 5
-}) => (
-  <div className="ability-pips">
-    {Array.from({ length: max }).map((_, idx) => (
-      <span
-        key={idx}
-        className={
-          "ability-pip" + (idx < count ? " ability-pip--filled" : "")
-        }
-      />
-    ))}
-  </div>
-);
+type ClassKey = "Attack" | "Tank" | "Utility";
 
-export const ClassTilesRow: React.FC<Props> = ({
-  pet,
-  onToggleAbilityPoint,
-  totals
-}) => {
-  const abilities = pet?.abilities;
+const classLabels: Record<ClassKey, string> = {
+  Attack: "Attack Bestiary",
+  Tank: "Tank Bestiary",
+  Utility: "Utility Bestiary"
+};
 
-  const renderCard = (klass: ClassKey, title: string) => {
-    const list = abilities?.[klass] ?? [];
+function hasClassOnTeam(selectedPets: TameablePet[], className: ClassKey): boolean {
+  return selectedPets.some((p) => p.class === className);
+}
+
+function computeScoredTraits(
+  className: ClassKey,
+  selectedPets: TameablePet[],
+  playstyle: PlaystyleKey,
+  bestiary: BestiarySets | null
+): ScoredTrait[] {
+  if (!bestiary) return [];
+
+  if (className === "Attack") {
+    return recommendBestiaryAttack(selectedPets, playstyle, bestiary.attack);
+  }
+  if (className === "Tank") {
+    return recommendBestiaryTank(selectedPets, playstyle, bestiary.tank);
+  }
+  return recommendBestiaryUtility(selectedPets, playstyle, bestiary.utility);
+}
+
+function TraitPointsList({ scored }: { scored: ScoredTrait[] }) {
+  // First pass: base allocation from scores/ranks
+  let allocation = buildTwentyPointAllocation(scored);
+
+  // If we didn't hit 20 yet but have traits, top off by adding points
+  const totalUsed = allocation.reduce((sum, a) => sum + a.points, 0);
+  const maxBudget = 20;
+
+  if (allocation.length && totalUsed < maxBudget) {
+    // Work with a copy so we can tweak in place
+    const byName = new Map(allocation.map(a => [a.name, { ...a }]));
+
+    // Sort original scored list best‑first so we always top off the strongest traits
+    const sorted = [...scored].sort((a, b) => b.score - a.score);
+
+    let remaining = maxBudget - totalUsed;
+
+    // Helper: given current points, how many points to add for next tier step
+    const nextTierIncrement = (currentPoints: number): number => {
+      if (currentPoints <= 0) return 1; // to 1 (Tier 1)
+      if (currentPoints === 1) return 2; // to 3 (Tier 2)
+      if (currentPoints === 3) return 3; // to 6 (Tier 3)
+      return 0; // already at 6 or unexpected value
+    };
+
+    for (const s of sorted) {
+      if (remaining <= 0) break;
+
+      const current = byName.get(s.trait.name) || {
+        name: s.trait.name,
+        description: s.trait.description || "",
+        points: 0
+      };
+
+      const increment = nextTierIncrement(current.points);
+      if (increment > 0 && increment <= remaining) {
+        current.points += increment;
+        remaining -= increment;
+        byName.set(s.trait.name, current);
+      }
+    }
+
+    allocation = Array.from(byName.values());
+  }
+
+  if (!allocation.length) {
     return (
-      <article className="card">
-        <div className="class-card-title">{title}</div>
-        <div className="abilities-list">
-          {list.map((ab) => (
-            <button
-              key={ab.id}
-              type="button"
-              className="ability-row"
-              onClick={() => onToggleAbilityPoint(klass, ab.id)}
-            >
-              <div className="ability-meta">
-                <span className="ability-name">{ab.name}</span>
-                {ab.description && (
-                  <span className="ability-desc">{ab.description}</span>
-                )}
-              </div>
-              <AbilityPips count={ab.points} max={ab.maxPoints ?? 5} />
-            </button>
-          ))}
-        </div>
-      </article>
+      <p className="bestiary-body">
+        No standout traits yet for this team.
+      </p>
     );
+  }
+
+  const pointsToTier = (pts: number): number => {
+    if (pts >= 6) return 3;
+    if (pts >= 3) return 2;
+    if (pts >= 1) return 1;
+    return 0;
   };
 
-  const total = totals.total || 1;
-  const attackWidth = (totals.attack / total) * 100;
-  const tankWidth = (totals.tank / total) * 100;
-  const utilityWidth = (totals.utility / total) * 100;
+  return (
+    <ul className="space-y-1">
+      {allocation.map((entry) => {
+        const tier = pointsToTier(entry.points);
 
+        return (
+          <li key={entry.name} className="flex items-center justify-between">
+            <div className="text-xs font-semibold">
+              {entry.name} - T{tier}: {entry.points} pts
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export const ClassTilesRow: React.FC<Props> = ({
+  selectedPets,
+  playstyle,
+  bestiary
+}) => {
+  const classes: ClassKey[] = ["Attack", "Tank", "Utility"];
+
+  // IMPORTANT: this component is rendered inside the 3‑column .desktop-grid
+  // in AppShell, so we return three sibling cards, one per column.
   return (
     <>
-      <div className="classes-row">
-        {renderCard("attack", "Attack abilities")}
-        {renderCard("tank", "Tank abilities")}
-        {renderCard("utility", "Utility abilities")}
-      </div>
-      <div className="points-footer">
-        <span>
-          Points: {totals.total} total · Attack {totals.attack} · Tank{" "}
-          {totals.tank} · Utility {totals.utility}
-        </span>
-        <div className="points-footer-bar">
+      {classes.map((className) => {
+        const enabled = hasClassOnTeam(selectedPets, className);
+        const scoredTraits = enabled
+          ? computeScoredTraits(className, selectedPets, playstyle, bestiary)
+          : [];
+
+        return (
           <div
-            className="points-footer-segment"
-            style={{ width: `${attackWidth}%`, background: "#f97316" }}
-          />
-          <div
-            className="points-footer-segment"
-            style={{ width: `${tankWidth}%`, background: "#3b82f6" }}
-          />
-          <div
-            className="points-footer-segment"
-            style={{ width: `${utilityWidth}%`, background: "#22c55e" }}
-          />
-        </div>
-      </div>
+            key={className}
+            className={`bestiary-card ${enabled ? "" : "bestiary-card--disabled"}`}
+          >
+            <div className="bestiary-header">
+              <h3>{classLabels[className]}</h3>
+            </div>
+
+            {enabled ? (
+              <TraitPointsList scored={scoredTraits} />
+            ) : (
+              <p className="bestiary-body">
+                {className === "Attack" &&
+                  "No standout traits yet for this team."}
+                {className === "Tank" &&
+                  "No tank pets on team. Add at least one tank pet to see traits."}
+                {className === "Utility" &&
+                  "No standout traits yet for this team."}
+              </p>
+            )}
+          </div>
+        );
+      })}
     </>
   );
 };

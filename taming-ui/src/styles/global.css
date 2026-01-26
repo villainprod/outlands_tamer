@@ -143,6 +143,18 @@ body {
   border-radius: 999px;
 }
 
+.pet-status-dot--attack {
+  background: #f97316; /* orange */
+}
+
+.pet-status-dot--tank {
+  background: #3b82f6; /* blue */
+}
+
+.pet-status-dot--utility {
+  background: #22c55e; /* green */
+}
+
 .pet-status-dot--ok {
   background: var(--success);
 }
@@ -168,8 +180,8 @@ body {
 /* Grid layout for desktop */
 .desktop-grid {
   display: grid;
-  grid-template-columns: 2.1fr 1.6fr 1.6fr;
-  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px; /* adjust to your spacing */
 }
 
 .card {
@@ -241,6 +253,16 @@ body {
   background: var(--accent);
 }
 
+.bestiary-card {
+  background: #0f172a; /* dark slate */
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+
+
+
 /* Chips */
 .chip-set-vertical {
   display: flex;
@@ -299,6 +321,44 @@ body {
 .quick-stat-label {
   color: var(--text-subtle);
 }
+
+/* three-class bestiary row */
+.grid.grid-cols-3 {
+  align-items: flex-start;
+}
+
+.bestiary-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 16px;
+}
+
+.bestiary-card {
+  background: #0b1220;
+  border-radius: 16px;
+  padding: 12px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.bestiary-card--disabled {
+  opacity: 0.4;
+}
+
+.bestiary-card h3 {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.bestiary-body {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+
 
 /* Class tiles row */
 .classes-row {

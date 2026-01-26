@@ -1,17 +1,35 @@
 // src/components/layout/AppShell.tsx
 import React from "react";
-import type { Pet, ClassKey, StatKey } from "../../App";
+import type { StatKey } from "../../App";
+import type { TameablePet } from "../../types/tameables";
+import type { ClassKey } from "../../App";
 import { PetStrip } from "../pets/PetStrip";
 import { TamingScoreCard } from "../score/TamingScoreCard";
 import { PlayStyleCard } from "../playstyle/PlayStyleCard";
 import { QuickStatsCard } from "../stats/QuickStatsCard";
 import { ClassTilesRow } from "../classes/ClassTilesRow";
+import type { PlaystyleKey } from "../../logic/teamScoring";
+import type { BestiarySets } from "../../logic/bestiary";
+
+type TeamStats = {
+  score: number;
+  survivability: number;
+  damage: number;
+  control: number;
+  utility: number;
+};
+
+type UiPet = TameablePet & {
+  stats: Record<StatKey, number>;
+  tamingScore: number;
+};
 
 type Props = {
-  pets: Pet[];
-  selectedPet?: Pet;
+  pets: TameablePet[];
+  selectedPet?: UiPet;
+  teamStats: TeamStats;
   onSelectPet: (id: string) => void;
-  onChangePlayStyle: (style: Pet["playStyle"]) => void;
+  onChangePlayStyle: (style: "ranged" | "melee" | "aoe") => void;
   onToggleAbilityPoint: (klass: ClassKey, abilityId: string) => void;
   totalPoints: { total: number; attack: number; tank: number; utility: number };
   pendingSave: boolean;
@@ -19,11 +37,14 @@ type Props = {
   onRemovePet: (id: string) => void;
   onClearTeam: () => void;
   onAddPet: () => void;
+  playstyle: PlaystyleKey;
+  bestiary: BestiarySets | null;
 };
 
 export const AppShell: React.FC<Props> = ({
   pets,
   selectedPet,
+  teamStats,
   onSelectPet,
   onChangePlayStyle,
   onToggleAbilityPoint,
@@ -32,7 +53,9 @@ export const AppShell: React.FC<Props> = ({
   onSave,
   onRemovePet,
   onClearTeam,
-  onAddPet
+  onAddPet,
+  playstyle,
+  bestiary
 }) => {
   const statsOrder: StatKey[] = ["survivability", "damage", "control", "utility"];
 
@@ -43,7 +66,6 @@ export const AppShell: React.FC<Props> = ({
           Ultima Outlands · Taming planner
         </div>
 
-        {/* Clear team button in header */}
         <button
           type="button"
           className="chip"
@@ -63,24 +85,32 @@ export const AppShell: React.FC<Props> = ({
           onAddPet={onAddPet}
         />
 
+        {/* Middle area: 2 rows x 3 columns */}
         <section className="desktop-grid">
-          <TamingScoreCard pet={selectedPet} statsOrder={statsOrder} />
+          {/* Row 1: team score, play style, quick stats */}
+          <TamingScoreCard teamStats={teamStats} />
+
           <PlayStyleCard
             pet={selectedPet}
             onChangePlayStyle={onChangePlayStyle}
           />
-          <QuickStatsCard pet={selectedPet} statsOrder={statsOrder} />
-        </section>
 
-        <section>
+          <QuickStatsCard pet={selectedPet} statsOrder={statsOrder} />
+
+          {/* Row 2: three bestiary tiles (Attack/Tank/Utility) */}
           <ClassTilesRow
-            pet={selectedPet}
-            onToggleAbilityPoint={onToggleAbilityPoint}
-            totals={totalPoints}
+            selectedPets={pets}
+            playstyle={playstyle}
+            bestiary={bestiary}
           />
         </section>
 
         <section className="save-build-bar">
+          <div className="points-summary">
+            Points: {totalPoints.total} total · Attack {totalPoints.attack} · Tank{" "}
+            {totalPoints.tank} · Utility {totalPoints.utility}
+          </div>
+
           <button
             className="save-build-button"
             disabled={!pendingSave}

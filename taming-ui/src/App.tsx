@@ -5,6 +5,8 @@ import { AppShell } from "./components/layout/AppShell";
 import { AddPetModal } from "./components/pets/AddPetModal";
 import type { TameablePet } from "./types/tameables";
 import { scoreTeam, type PlaystyleKey } from "./logic/teamScoring";
+import { loadBestiarySets, type BestiarySets } from "./logic/bestiary";
+
 
 export type StatKey = "survivability" | "damage" | "control" | "utility";
 
@@ -18,7 +20,12 @@ export type Ability = {
 
 export type ClassKey = "attack" | "tank" | "utility";
 
-// Lightweight CSV parser for tameables.csv header + rows
+const MAX_SLOTS = 5;
+
+const getUsedSlots = (pets: TameablePet[]) =>
+  pets.reduce((sum, p) => sum + (p.slots || 0), 0);
+
+// CSV → tameables
 function parseTameablesCsv(csvText: string): TameablePet[] {
   const lines = csvText.trim().split(/\r?\n/);
   if (lines.length <= 1) return [];
@@ -35,9 +42,7 @@ function parseTameablesCsv(csvText: string): TameablePet[] {
       const slots = Number(cols[idx("Slots")] || 0);
       const minDmg = Number(cols[idx("MinDmg")] || 0);
       const maxDmg = Number(cols[idx("MaxDmg")] || 0);
-      const underdogScalar = Number(
-        cols[idx("UnderdogScalar")] || 1
-      );
+      const underdogScalar = Number(cols[idx("UnderdogScalar")] || 1);
 
       const cooldownAbility = cols[idx("CooldownAbility")] || "";
       const passiveAbility = cols[idx("PassiveAbility")] || "";
@@ -86,7 +91,7 @@ function parseTameablesCsv(csvText: string): TameablePet[] {
     });
 }
 
-// Simple tag derivation for scoring; can be expanded over time.
+// derive tags for scoring
 function deriveTagsFromTameable(
   className: string,
   combat: string,
@@ -118,14 +123,12 @@ function deriveTagsFromTameable(
     tags.add("poison");
   }
 
-  // ranged-friendly if description suggests ranged or breath/barrage
   if (allAbil.includes("ranged")) tags.add("ranged_friendly");
 
   return Array.from(tags);
 }
 
-// Map tameable to UI "Pet" stats used by the right-hand quick stats.
-// For now just create some approximate scores from raw numbers.
+// approximate UI stats from raw numbers
 function computeUiStatsForPet(p: TameablePet): Record<StatKey, number> {
   const survivability = Math.max(
     0,
@@ -138,7 +141,7 @@ function computeUiStatsForPet(p: TameablePet): Record<StatKey, number> {
       (((p.minDmg + p.maxDmg) / 2) / 25) * 100
     )
   );
-  const control = 50; // placeholder until you define control inputs
+  const control = 50;
   const utility = p.class === "Utility" ? 80 : 40;
 
   return {
@@ -158,19 +161,26 @@ export const App: React.FC = () => {
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [petSearch, setPetSearch] = useState("");
+  const [bestiary, setBestiary] = useState<BestiarySets | null>(null);
 
-  // Load tameables.csv once
+  // load tameables + bestiary once
   useEffect(() => {
     const load = async () => {
-      const res = await fetch("/tameables.csv");
-      const text = await res.text();
-      const parsed = parseTameablesCsv(text);
+      const [tameablesRes, bestiarySets] = await Promise.all([
+        fetch("/tameables.csv").then((r) => r.text()),
+        loadBestiarySets()
+      ]);
+
+      const parsed = parseTameablesCsv(tameablesRes);
       setAllPets(parsed);
 
-      const initial = parsed.slice(0, 3); // seed team
+      const initial = parsed.slice(0, 3);
       setPets(initial);
       setSelectedPetId(initial[0]?.id ?? "");
+
+      setBestiary(bestiarySets);
     };
+
     load();
   }, []);
 
@@ -186,7 +196,9 @@ export const App: React.FC = () => {
 
   const handleRemovePet = (id: string) => {
     setPets((prev) => {
-      const next = prev.filter((p) => p.id !== id);
+      const next = prev.filter(
+        (p, idx) => !(p.id === id && idx === prev.findIndex((q) => q.id === id))
+      );
       if (!next.find((p) => p.id === selectedPetId)) {
         setSelectedPetId(next[0]?.id ?? "");
       }
@@ -202,20 +214,24 @@ export const App: React.FC = () => {
   };
 
   const handleAddPet = () => {
-    if (pets.length >= 5) return;
+    if (getUsedSlots(pets) >= MAX_SLOTS) return;
     setIsAddModalOpen(true);
   };
 
   const handleConfirmAddPet = (id: string) => {
     setPets((prev) => {
-      if (prev.length >= 5) return prev;
-      if (prev.find((p) => p.id === id)) return prev;
-
       const candidate = allPets.find((p) => p.id === id);
       if (!candidate) return prev;
 
-      return [...prev, candidate];
+      const usedSlots = getUsedSlots(prev);
+      const cost = candidate.slots || 0;
+      if (usedSlots + cost > MAX_SLOTS) {
+        return prev;
+      }
+
+      return [...prev, candidate]; // allow duplicates
     });
+
     setPendingSave(true);
     setIsAddModalOpen(false);
     setPetSearch("");
@@ -232,7 +248,6 @@ export const App: React.FC = () => {
   };
 
   const handleToggleAbilityPoint = (_klass: ClassKey, _abilityId: string) => {
-    // ability points will come from bestiary integration later
     setPendingSave(true);
   };
 
@@ -317,7 +332,12 @@ export const App: React.FC = () => {
         onRemovePet={handleRemovePet}
         onClearTeam={handleClearTeam}
         onAddPet={handleAddPet}
+        playstyle={playstyle}
+        bestiary={bestiary}
       />
+
+      {/* Bottom row: bestiary recommendations */}
+      
 
       <AddPetModal
         open={isAddModalOpen}
@@ -325,6 +345,7 @@ export const App: React.FC = () => {
         onSearchChange={setPetSearch}
         allPets={allPets}
         currentTeamIds={pets.map((p) => p.id)}
+        currentSlots={getUsedSlots(pets)}
         onClose={() => {
           setIsAddModalOpen(false);
           setPetSearch("");

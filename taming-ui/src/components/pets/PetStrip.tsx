@@ -1,9 +1,9 @@
 // src/components/pets/PetStrip.tsx
 import React from "react";
-import type { Pet } from "../../App";
+import type { TameablePet } from "../../types/tameables";
 
 type Props = {
-  pets: Pet[];
+  pets: TameablePet[];
   selectedId?: string;
   onSelect: (id: string) => void;
   onRemovePet: (id: string) => void;
@@ -21,17 +21,19 @@ export const PetStrip: React.FC<Props> = ({
   const cappedPets = pets.slice(0, maxTiles);
   const remaining = Math.max(0, maxTiles - cappedPets.length);
 
-  const statusLabel = (status: Pet["status"]) => {
-    if (status === "healthy") return "Ready";
-    if (status === "injured") return "Resting";
-    return "Critical";
+  const classDotClass = (cls: string) => {
+    const c = cls.toLowerCase();
+    if (c === "attack") return "pet-status-dot--attack";
+    if (c === "tank") return "pet-status-dot--tank";
+    if (c === "utility") return "pet-status-dot--utility";
+    return "pet-status-dot--ok";
   };
 
   return (
     <div className="pet-strip" aria-label="Pets">
-      {cappedPets.map((pet) => (
+      {cappedPets.map((pet, index) => (
         <div
-          key={pet.id}
+          key={`${pet.id}-${index}`}
           className={
             "pet-tile" + (pet.id === selectedId ? " pet-tile--selected" : "")
           }
@@ -48,30 +50,14 @@ export const PetStrip: React.FC<Props> = ({
               flex: 1
             }}
           >
-            <div
-              className="pet-avatar"
-              style={
-                pet.avatarUrl
-                  ? { backgroundImage: `url(${pet.avatarUrl})` }
-                  : undefined
-              }
-            />
+            <div className="pet-avatar" />
             <div className="pet-meta">
               <div className="pet-name">{pet.name}</div>
               <div className="pet-status-row">
                 <span
-                  className={
-                    "pet-status-dot " +
-                    (pet.status === "healthy"
-                      ? "pet-status-dot--ok"
-                      : pet.status === "injured"
-                      ? "pet-status-dot--warn"
-                      : "pet-status-dot--danger")
-                  }
+                  className={"pet-status-dot " + classDotClass(pet.class)}
                 />
-                <span className="pet-status-label">
-                  {statusLabel(pet.status)}
-                </span>
+                <span className="pet-status-label">{pet.class}</span>
               </div>
             </div>
           </button>
