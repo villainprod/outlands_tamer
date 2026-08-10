@@ -20,7 +20,6 @@ export const AddPetModal: React.FC<Props> = ({
   search,
   onSearchChange,
   allPets,
-  currentTeamIds,
   currentSlots,
   onClose,
   onAddPet

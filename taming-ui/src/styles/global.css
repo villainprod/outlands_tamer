@@ -358,6 +358,85 @@ body {
   line-height: 1.4;
 }
 
+/* Upgrade allocation list */
+.bestiary-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bestiary-budget {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.bestiary-budget--cross {
+  color: #fbbf24;
+}
+
+.upgrade-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.upgrade-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.upgrade-row:last-child {
+  border-bottom: none;
+}
+
+.upgrade-name {
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.upgrade-row--cross .upgrade-name {
+  color: #fbbf24;
+}
+
+.upgrade-cross-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(251, 191, 36, 0.16);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  color: #fbbf24;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.upgrade-tier {
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.points-summary-item + .points-summary-item::before {
+  content: " · ";
+  color: #64748b;
+}
+
 
 
 /* Class tiles row */

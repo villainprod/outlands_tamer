@@ -1,9 +1,9 @@
 // src/components/stats/QuickStatsCard.tsx
 import React from "react";
-import type { Pet, StatKey } from "../../App";
+import type { UiPet, StatKey } from "../../App";
 
 type Props = {
-  pet?: Pet;
+  pet?: UiPet;
   statsOrder: StatKey[];
 };
 

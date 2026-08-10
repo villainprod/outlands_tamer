@@ -1,11 +1,11 @@
 // src/components/playstyle/PlayStyleCard.tsx
 import React from "react";
-import type { Pet } from "../../App";
+import type { UiPet, PlayStyleLabel } from "../../App";
 import { Chip } from "../common/Chip";
 
 type Props = {
-  pet?: Pet;
-  onChangePlayStyle: (style: Pet["playStyle"]) => void;
+  pet?: UiPet;
+  onChangePlayStyle: (style: PlayStyleLabel) => void;
 };
 
 export const PlayStyleCard: React.FC<Props> = ({ pet, onChangePlayStyle }) => {

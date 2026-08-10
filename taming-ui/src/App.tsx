@@ -1,11 +1,12 @@
 // src/App.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import "./styles/global.css";
 import { AppShell } from "./components/layout/AppShell";
 import { AddPetModal } from "./components/pets/AddPetModal";
 import type { TameablePet } from "./types/tameables";
 import { scoreTeam, type PlaystyleKey } from "./logic/teamScoring";
 import { loadBestiarySets, type BestiarySets } from "./logic/bestiary";
+import type { ClassAllocation } from "./logic/upgradeOptimizer";
 
 
 export type StatKey = "survivability" | "damage" | "control" | "utility";
@@ -19,6 +20,15 @@ export type Ability = {
 };
 
 export type ClassKey = "attack" | "tank" | "utility";
+
+export type PlayStyleLabel = "ranged" | "melee" | "aoe";
+
+/** A team pet decorated with the derived values the UI cards need. */
+export type UiPet = TameablePet & {
+  stats: Record<StatKey, number>;
+  tamingScore: number;
+  playStyle?: PlayStyleLabel;
+};
 
 const MAX_SLOTS = 5;
 
@@ -158,10 +168,12 @@ export const App: React.FC = () => {
   const [selectedPetId, setSelectedPetId] = useState<string>("");
   const [pendingSave, setPendingSave] = useState(false);
   const [playstyle, setPlaystyle] = useState<PlaystyleKey>("balanced");
+  const [playStyleLabel, setPlayStyleLabel] = useState<PlayStyleLabel>("aoe");
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [petSearch, setPetSearch] = useState("");
   const [bestiary, setBestiary] = useState<BestiarySets | null>(null);
+  const [allocations, setAllocations] = useState<ClassAllocation[]>([]);
 
   // load tameables + bestiary once
   useEffect(() => {
@@ -237,12 +249,13 @@ export const App: React.FC = () => {
     setPetSearch("");
   };
 
-  const handleChangePlayStyle = (styleLabel: "ranged" | "melee" | "aoe") => {
+  const handleChangePlayStyle = (styleLabel: PlayStyleLabel) => {
     let key: PlaystyleKey = "balanced";
     if (styleLabel === "ranged") key = "aoe_far";
     else if (styleLabel === "melee") key = "single_target";
     else key = "balanced";
 
+    setPlayStyleLabel(styleLabel);
     setPlaystyle(key);
     setPendingSave(true);
   };
@@ -303,7 +316,10 @@ export const App: React.FC = () => {
         utility: 0
       };
 
-  const totalPoints = { total: 0, attack: 0, tank: 0, utility: 0 };
+  const handleAllocationsChange = useCallback(
+    (next: ClassAllocation[]) => setAllocations(next),
+    []
+  );
 
   const handleSave = () => {
     setPendingSave(false);
@@ -318,7 +334,8 @@ export const App: React.FC = () => {
             ? {
                 ...selectedPet,
                 stats: quickStats,
-                tamingScore: teamScore
+                tamingScore: teamScore,
+                playStyle: playStyleLabel
               }
             : undefined
         }
@@ -326,7 +343,8 @@ export const App: React.FC = () => {
         onSelectPet={handleSelectPet}
         onChangePlayStyle={handleChangePlayStyle}
         onToggleAbilityPoint={handleToggleAbilityPoint}
-        totalPoints={totalPoints}
+        allocations={allocations}
+        onAllocationsChange={handleAllocationsChange}
         pendingSave={pendingSave}
         onSave={handleSave}
         onRemovePet={handleRemovePet}
